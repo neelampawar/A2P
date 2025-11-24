@@ -17,7 +17,7 @@ const Navbar: React.FC<NavbarProps> = ({ onSearchClick, onProfileClick }) => {
         {/* Brand & Location */}
         <div className="flex flex-col">
           <h1 className="text-2xl font-bold text-brand-yellow tracking-tight leading-none">
-            blink<span className="text-brand-green">agent</span>
+            cymbal retail
           </h1>
           <div className="flex items-center text-xs font-medium text-gray-500 mt-1">
             <span className="font-bold text-gray-800">12 mins</span>

@@ -1,10 +1,10 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { AgentResponse } from '../types';
+import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { AgentResponse, AgentActionType } from '../types';
 
 let genAI: GoogleGenAI | null = null;
 const imageCache: Record<string, string> = {};
 
-// Queue system to manage concurrency and rate limits
+// Queue system to manage concurrency and rate limits for images
 const generationQueue: Array<{
   productId: string;
   productName: string;
@@ -19,6 +19,8 @@ const getGenAI = () => {
   }
   return genAI;
 };
+
+/* --- IMAGE GENERATION (Unchanged) --- */
 
 export const getCachedImage = (productId: string): string | undefined => {
   return imageCache[productId];
@@ -36,12 +38,10 @@ const processQueue = async () => {
   }
 
   try {
-    // Check cache again just in case
     if (imageCache[task.productId]) {
       task.resolve(imageCache[task.productId]);
     } else {
       const ai = getGenAI();
-      // Using gemini-2.5-flash-image (Nano Banana) for image generation
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-image",
         contents: {
@@ -78,12 +78,10 @@ const processQueue = async () => {
         task.resolve(null);
       }
     }
-
   } catch (error) {
     console.error(`Failed to generate image for ${task.productName}:`, error);
     task.resolve(null);
   } finally {
-    // Add a 2-second delay between processing requests to avoid hitting rate limits (429)
     setTimeout(() => {
       isProcessingQueue = false;
       processQueue();
@@ -92,69 +90,74 @@ const processQueue = async () => {
 };
 
 export const generateProductImage = (productId: string, productName: string, description: string): Promise<string | null> => {
-  // Check cache first
   if (imageCache[productId]) return Promise.resolve(imageCache[productId]);
-
   return new Promise((resolve) => {
     generationQueue.push({ productId, productName, description, resolve });
     processQueue();
   });
 };
 
-export const getShoppingSuggestions = async (userQuery: string, productList: string[]): Promise<AgentResponse> => {
-  try {
-    const ai = getGenAI();
-    const systemPrompt = `
-      You are an intelligent shopping assistant for a grocery app. 
-      Your goal is to match the user's request (e.g., "I want to cook pasta") to the available products list.
-      
-      Available Products: ${productList.join(', ')}
+/* --- SHOPPING AGENT (Chat) --- */
 
-      Return a JSON response with:
-      1. 'items': An array of objects, each containing 'productName' (must match exactly one from the available list) and 'reason' (short explanation).
-      2. 'thoughtProcess': A brief string explaining your choices.
-
-      If a product isn't explicitly in the list but is needed, try to find the closest substitute in the list or ignore it.
-      Return ONLY valid JSON.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: userQuery,
-      config: {
-        systemInstruction: systemPrompt,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            items: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  productName: { type: Type.STRING },
-                  reason: { type: Type.STRING },
-                },
-                required: ["productName", "reason"]
-              }
-            },
-            thoughtProcess: { type: Type.STRING }
-          },
-          required: ["items", "thoughtProcess"]
-        }
-      }
-    });
-
-    const jsonText = response.text;
-    if (!jsonText) throw new Error("No response from AI");
+export const createShoppingChat = (productList: string[]): Chat => {
+  const ai = getGenAI();
+  
+  const systemPrompt = `
+    You are an intelligent shopping assistant for 'Cymbal Retail'.
+    Available Products: ${productList.join(', ')}.
     
-    return JSON.parse(jsonText) as AgentResponse;
+    Your goal is to help the user build a cart through a natural conversation.
+    
+    Protocol:
+    1. **Identify**: When user asks for a product, check if it exists in the Available Products list.
+    2. **Quantity Check**: If the user does not specify a quantity (e.g., "I want milk"), you MUST ask for it (e.g., "How many packets of Amul Taaza Milk (500ml) would you like?").
+    3. **Proposal**: Once you have the product and quantity, do NOT add it immediately. Instead, propose the action: "I've found [Product]. Shall I add [Quantity] to your cart?". Set type='PROPOSE_CART'.
+    4. **Action**: If the user confirms (e.g., "yes", "sure", "ok"), generate a response with type='ADD_TO_CART' containing the items. The message should say "Added [Product] to your cart. Anything else, or are you ready to checkout?".
+    5. **Checkout**: If the user indicates they want to pay or checkout, generate a response with type='INITIATE_CHECKOUT'.
+    6. **Clarify**: If a product is not found, suggest the closest match or apologize. Set type='INFO'.
 
-  } catch (error) {
-    console.error("Gemini API Error:", error);
-    return {
-      items: [],
-      thoughtProcess: "I'm having trouble connecting to the brain right now. Please try browsing manually."
-    };
-  }
+    Output Schema:
+    You must always return a JSON object with this schema:
+    {
+      "type": "QUESTION" | "PROPOSE_CART" | "ADD_TO_CART" | "INITIATE_CHECKOUT" | "INFO",
+      "message": "The text string to show the user",
+      "items": [ { "productName": "Exact Product Name", "quantity": 1 } ] (Optional, required for PROPOSE_CART and ADD_TO_CART)
+    }
+  `;
+
+  return ai.chats.create({
+    model: "gemini-3-pro-preview",
+    config: {
+      systemInstruction: systemPrompt,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          type: { 
+            type: Type.STRING, 
+            enum: [
+              AgentActionType.QUESTION, 
+              AgentActionType.PROPOSE_CART, 
+              AgentActionType.ADD_TO_CART, 
+              AgentActionType.INITIATE_CHECKOUT, 
+              AgentActionType.INFO
+            ] 
+          },
+          message: { type: Type.STRING },
+          items: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                productName: { type: Type.STRING },
+                quantity: { type: Type.NUMBER },
+              },
+              required: ["productName", "quantity"]
+            }
+          }
+        },
+        required: ["type", "message"]
+      }
+    }
+  });
 };

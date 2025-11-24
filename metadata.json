@@ -1,6 +1,6 @@
 {
-  "name": "BlinkAgent - AI Grocery",
-  "description": "A Blinkit-style quick commerce application featuring AI-powered shopping assistance and a simulated Google/PayPal Agent Payment Protocol checkout integration.",
+  "name": "Cymbal Retail",
+  "description": "A Cymbal quick commerce application featuring AI-powered shopping assistance and a simulated Google/PayPal Agent Payment Protocol checkout integration.",
   "requestFramePermissions": [
     "microphone"
   ]

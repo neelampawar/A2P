@@ -6,8 +6,8 @@ import { Order, SavedCard } from '../types';
 const DB_DELAY = 600; // Simulate network latency
 
 const STORAGE_KEYS = {
-  ORDERS: 'blink_alloydb_orders',
-  CARDS: 'blink_alloydb_cards'
+  ORDERS: 'cymbal_alloydb_orders',
+  CARDS: 'cymbal_alloydb_cards'
 };
 
 export const alloyDbService = {

@@ -30,12 +30,22 @@ export enum PaymentStep {
   FAILED = 'FAILED'
 }
 
+// Updated Agent Types for Multi-turn Conversation
+export enum AgentActionType {
+  QUESTION = 'QUESTION', // Ask for more details (quantity, etc.)
+  PROPOSE_CART = 'PROPOSE_CART', // Suggest items to add, ask for confirmation
+  ADD_TO_CART = 'ADD_TO_CART', // Action to add items after confirmation
+  INITIATE_CHECKOUT = 'INITIATE_CHECKOUT', // Action to open payment
+  INFO = 'INFO' // General response
+}
+
 export interface AgentResponse {
-  items: Array<{
+  type: AgentActionType;
+  message: string; // The text to display to the user
+  items?: Array<{
     productName: string;
-    reason: string;
+    quantity: number;
   }>;
-  thoughtProcess: string;
 }
 
 export interface Order {
