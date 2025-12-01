@@ -40,9 +40,11 @@ To get the project up and running on your local machine, follow these simple ste
     npm install
     ```
 
-3.  **Install backend dependencies**:
+3.  **Set up the backend**:
     ```bash
     cd backend
+    python3 -m venv venv
+    source venv/bin/activate
     pip install -r requirements.txt
     ```
 
@@ -57,6 +59,7 @@ To get the project up and running on your local machine, follow these simple ste
 1.  **Start the backend server**:
     ```bash
     cd backend
+    source venv/bin/activate
     uvicorn main:app --reload
     ```
 
