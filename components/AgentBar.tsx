@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, ArrowRight, Loader2, X, Mic, MicOff, Send, ShoppingCart, CreditCard } from 'lucide-react';
-import { createShoppingChat, getCachedImage } from '../services/geminiService';
+import { createShoppingChat, getCachedImage, logAgentActionToBackend } from '../services/geminiService';
+import { executeAP2Transaction } from '../services/paymentService';
 import { MOCK_PRODUCTS } from '../constants';
 import { useCart } from '../context/CartContext';
 import { Chat, GenerateContentResponse } from '@google/genai';
-import { AgentActionType, AgentResponse } from '../types';
+import { AgentActionType, AgentResponse, PaymentStep } from '../types';
 
 interface AgentBarProps {
   isOpen: boolean;
@@ -27,8 +28,10 @@ const AgentBar: React.FC<AgentBarProps> = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStep>(PaymentStep.IDLE);
   
-  const { addToCart, setIsCheckoutOpen } = useCart();
+  const { addToCart, setIsCheckoutOpen, items, totalAmount, clearCart } = useCart();
   const recognitionRef = useRef<any>(null);
   const chatRef = useRef<Chat | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -103,14 +106,101 @@ const AgentBar: React.FC<AgentBarProps> = ({ isOpen, onClose }) => {
           addToCart(productToAdd, item.quantity);
         }
       });
+      
+      // Log to backend
+      logAgentActionToBackend('add_to_cart', {
+        items: response.items,
+        userEmail: 'bugsbunny@gmail.com'
+      });
     }
 
     if (response.type === AgentActionType.INITIATE_CHECKOUT) {
-      // Small delay to let the user read the message
+      // Log checkout to backend
+      logAgentActionToBackend('initiate_checkout', {
+        userEmail: 'bugsbunny@gmail.com',
+        source: 'agent'
+      });
+      
+      // Initiate AP2 payment through backend
+      setIsProcessingPayment(true);
+      setMessages(prev => [...prev, { 
+        role: 'agent', 
+        text: 'Great! Let me process your payment securely through our AP2 payment gateway...' 
+      }]);
+      
+      // Small delay then trigger AP2 payment
       setTimeout(() => {
-        onClose();
-        setIsCheckoutOpen(true);
+        triggerAP2Payment();
       }, 1500);
+      
+      return; // Don't close the agent bar yet
+    }
+    
+    // Log all agent responses for audit trail
+    logAgentActionToBackend('agent_response', {
+      type: response.type,
+      message: response.message
+    });
+  };
+
+  /**
+   * Trigger AP2 payment with items currently in cart
+   */
+  const triggerAP2Payment = async () => {
+    if (items.length === 0) {
+      setMessages(prev => [...prev, { 
+        role: 'agent', 
+        text: 'No items in cart. Please add something first.' 
+      }]);
+      setIsProcessingPayment(false);
+      return;
+    }
+
+    try {
+      setPaymentStatus(PaymentStep.IDENTIFYING);
+      
+      const cartItems = items.map(i => ({ name: i.name, quantity: i.quantity }));
+      
+      const success = await executeAP2Transaction(
+        cartItems,
+        "bugsbunny@gmail.com",
+        "Acme Bank Visa ending in 4242",
+        (step, log) => {
+          setPaymentStatus(step);
+          // Show payment steps to user
+          if (step === PaymentStep.SUCCESS) {
+            setMessages(prev => [...prev, { 
+              role: 'agent', 
+              text: `✅ Payment successful! Your order has been placed. Receipt ID: ${Date.now()}` 
+            }]);
+            clearCart();
+            setTimeout(() => {
+              onClose();
+            }, 2000);
+          } else if (step === PaymentStep.FAILED) {
+            setMessages(prev => [...prev, { 
+              role: 'agent', 
+              text: `❌ Payment failed: ${log}. Please try again.` 
+            }]);
+          }
+        },
+        { verboseMode: false }
+      );
+
+      if (!success) {
+        setMessages(prev => [...prev, { 
+          role: 'agent', 
+          text: 'Payment failed. Please try again or use manual checkout.' 
+        }]);
+      }
+    } catch (error: any) {
+      console.error('AP2 Payment error:', error);
+      setMessages(prev => [...prev, { 
+        role: 'agent', 
+        text: `Error during payment: ${error.message || 'Unknown error'}. Please try again.` 
+      }]);
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -129,12 +219,20 @@ const AgentBar: React.FC<AgentBarProps> = ({ isOpen, onClose }) => {
       const jsonText = (result as GenerateContentResponse).text;
       
       if (jsonText) {
-        const responseData = JSON.parse(jsonText) as AgentResponse;
-        processAgentResponse(responseData);
+        try {
+          const responseData = JSON.parse(jsonText) as AgentResponse;
+          processAgentResponse(responseData);
+        } catch (parseError) {
+          console.error("JSON Parse Error:", parseError, "Response:", jsonText);
+          setMessages(prev => [...prev, { role: 'agent', text: "I had trouble understanding that response. Could you try again?" }]);
+        }
+      } else {
+        throw new Error("No response from Gemini API");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Agent Error:", error);
-      setMessages(prev => [...prev, { role: 'agent', text: "I'm having trouble connecting right now. Please try again." }]);
+      const errorMsg = error?.message || "I'm having trouble connecting right now. Please try again.";
+      setMessages(prev => [...prev, { role: 'agent', text: errorMsg }]);
     } finally {
       setIsLoading(false);
     }
@@ -171,25 +269,25 @@ const AgentBar: React.FC<AgentBarProps> = ({ isOpen, onClose }) => {
               <div 
                 className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
                   msg.role === 'user' 
-                    ? 'bg-brand-dark text-white rounded-tr-sm' 
-                    : 'bg-white border border-gray-100 text-gray-800 rounded-tl-sm'
+                    ? 'bg-brand-green text-black rounded-tr-sm' 
+                    : 'bg-white border border-gray-100 text-black rounded-tl-sm'
                 }`}
               >
                 {msg.text}
                 
                 {/* Visual Indicators for Actions */}
                 {msg.type === AgentActionType.PROPOSE_CART && (
-                   <div className="mt-2 text-[10px] uppercase font-bold text-brand-green flex items-center gap-1">
+                   <div className="mt-2 text-[10px] uppercase font-bold text-yellow-400 flex items-center gap-1">
                      <ShoppingCart className="w-3 h-3" /> waiting for confirmation
                    </div>
                 )}
                 {msg.type === AgentActionType.ADD_TO_CART && (
-                   <div className="mt-2 text-[10px] uppercase font-bold text-brand-green flex items-center gap-1">
+                   <div className="mt-2 text-[10px] uppercase font-bold text-yellow-300 flex items-center gap-1">
                      <Sparkles className="w-3 h-3" /> Items Added
                    </div>
                 )}
                 {msg.type === AgentActionType.INITIATE_CHECKOUT && (
-                   <div className="mt-2 text-[10px] uppercase font-bold text-brand-yellow flex items-center gap-1">
+                   <div className="mt-2 text-[10px] uppercase font-bold text-yellow-300 flex items-center gap-1">
                      <CreditCard className="w-3 h-3" /> Opening Checkout...
                    </div>
                 )}

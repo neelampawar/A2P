@@ -16,10 +16,10 @@ const CartItemRow: React.FC<{ item: any, onInc: any, onDec: any }> = ({ item, on
        <div className="text-xs text-gray-500">{item.weight}</div>
        
        <div className="flex items-center gap-3 mt-1">
-          <div className="flex items-center bg-brand-green text-white rounded-md h-7 px-1">
-              <button onClick={() => onDec(item.id)} className="w-6 flex items-center justify-center hover:bg-green-700 rounded-l"><span className="text-lg leading-none">-</span></button>
-              <span className="text-xs font-bold w-6 text-center">{item.quantity}</span>
-              <button onClick={() => onInc(item.id, 1)} className="w-6 flex items-center justify-center hover:bg-green-700 rounded-r"><span className="text-lg leading-none">+</span></button>
+          <div className="flex items-center bg-brand-green rounded-md h-8 px-0.5 gap-0">
+              <button onClick={() => onDec(item.id)} className="w-7 h-full flex items-center justify-center hover:bg-green-700 rounded-l font-bold text-lg text-black">-</button>
+              <span className="flex-1 h-full flex items-center justify-center font-bold text-sm min-w-[24px] text-gray-900">{item.quantity}</span>
+              <button onClick={() => onInc(item.id, 1)} className="w-7 h-full flex items-center justify-center hover:bg-green-700 rounded-r font-bold text-lg text-black">+</button>
           </div>
        </div>
     </div>

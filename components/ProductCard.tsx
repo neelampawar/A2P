@@ -24,21 +24,18 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       return;
     }
 
-    // If it's a placeholder (picsum), try to generate a real one
-    if (product.image.includes('picsum') || product.image.includes('placeholder')) {
-      const loadAiImage = async () => {
-        setIsGenerating(true);
-        // Queue handled by service, no manual delay needed
-        const aiImage = await generateProductImage(product.id, product.name, product.description);
-        if (aiImage) {
-          setDisplayImage(aiImage);
-        }
-        setIsGenerating(false);
-      };
-      
-      loadAiImage();
-    }
-  }, [product.id, product.name, product.description, product.image]);
+    // Trigger image generation from Gemini
+    const loadAiImage = async () => {
+      setIsGenerating(true);
+      const aiImage = await generateProductImage(product.id, product.name, product.description);
+      if (aiImage) {
+        setDisplayImage(aiImage);
+      }
+      setIsGenerating(false);
+    };
+    
+    loadAiImage();
+  }, [product.id, product.name, product.description]);
 
   const handleDecrement = () => {
     if (quantity === 1) {
@@ -49,13 +46,12 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   };
 
   const handleAddToCart = () => {
-    // Pass the current display image (which might be AI generated) to the cart
     addToCart({ ...product, image: displayImage });
   };
 
   return (
     <div className="flex flex-col gap-2 p-2 bg-white rounded-xl border border-gray-100 shadow-sm relative overflow-hidden group">
-      <div className="aspect-square relative rounded-lg overflow-hidden bg-gray-50 mb-2 group-hover:shadow-md transition-shadow">
+      <div className="aspect-square relative rounded-lg overflow-hidden bg-white mb-2 group-hover:shadow-md transition-shadow">
         {isGenerating ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-50 text-gray-400">
             <Loader2 className="w-6 h-6 animate-spin mb-2 text-brand-yellow" />
@@ -67,10 +63,10 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <img 
             src={displayImage} 
             alt={product.name} 
-            className={`object-cover w-full h-full mix-blend-multiply transition-opacity duration-500 ${isGenerating ? 'opacity-0' : 'opacity-100'}`} 
+            className="object-cover w-full h-full transition-opacity duration-500"
           />
         )}
-        
+
         {!isGenerating && displayImage.startsWith('data:') && (
            <div className="absolute top-1 right-1 bg-black/50 backdrop-blur-md p-1 rounded-full" title="AI Generated Image">
              <Sparkles className="w-3 h-3 text-yellow-300" />
@@ -104,13 +100,13 @@ const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               Add
             </button>
           ) : (
-            <div className="flex items-center bg-brand-green text-white rounded-lg h-8 shadow-sm">
-              <button onClick={handleDecrement} className="px-2 h-full hover:bg-green-700 rounded-l-lg transition-colors">
-                <Minus className="w-3 h-3" />
+            <div className="flex items-center rounded-lg h-8 shadow-sm" style={{backgroundColor: '#0C831F'}}>
+              <button onClick={handleDecrement} className="px-2 h-full hover:opacity-80 rounded-l-lg transition-all flex items-center justify-center">
+                <Minus className="w-3 h-3" style={{color: 'white', strokeWidth: 3}} />
               </button>
-              <span className="text-xs font-bold px-1 min-w-[16px] text-center">{quantity}</span>
-              <button onClick={() => updateQuantity(product.id, 1)} className="px-2 h-full hover:bg-green-700 rounded-r-lg transition-colors">
-                <Plus className="w-3 h-3" />
+              <span className="text-xs font-bold px-1 min-w-[16px] text-center" style={{color: 'white'}}>{quantity}</span>
+              <button onClick={() => updateQuantity(product.id, 1)} className="px-2 h-full hover:opacity-80 rounded-r-lg transition-all flex items-center justify-center">
+                <Plus className="w-3 h-3" style={{color: 'white', strokeWidth: 3}} />
               </button>
             </div>
           )}

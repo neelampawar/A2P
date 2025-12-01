@@ -1,20 +1,74 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Blinkit-AP2 - Agentic Payments Protocol
 
-# Run and deploy your AI Studio app
+This project is a sophisticated, AI-driven e-commerce platform that demonstrates the power of agentic payments. It combines a sleek, modern frontend with a robust Python backend, allowing users to interact with a conversational AI to manage their shopping cart and complete transactions.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://aistudio-preprod.corp.google.com/apps/drive/1vQb_cEKUHwAuhaFI5CzJeqHBE6BZFeC-
+- **Conversational AI Shopping Assistant**: Engage with a Gemini-powered AI to add items to your cart, inquire about products, and initiate checkout.
+- **Agentic Payments**: Experience the future of online payments with a seamless, secure, and automated checkout process.
+- **Dynamic Product Catalog**: Browse a rich product catalog with dynamically generated images and real-time updates.
+- **Interactive UI**: A user-friendly interface built with React and Tailwind CSS provides a smooth and responsive shopping experience.
+- **Backend Integration**: The Python backend manages product information, shopping carts, and payment processing, ensuring data consistency and reliability.
 
-## Run Locally
+## Technologies Used
 
-**Prerequisites:**  Node.js
+- **Frontend**: React, TypeScript, Tailwind CSS, Vite
+- **Backend**: Python, FastAPI
+- **AI**: Gemini 2.5 Pro
+- **Payments**: Agentic Payments Protocol (AP2)
 
+## Getting Started
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+To get the project up and running on your local machine, follow these simple steps.
+
+### Prerequisites
+
+- Node.js
+- Python 3.10+
+- Pip
+
+### Installation
+
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/your-username/Blinkit-AP2.git
+    cd Blinkit-AP2
+    ```
+
+2.  **Install frontend dependencies**:
+    ```bash
+    npm install
+    ```
+
+3.  **Install backend dependencies**:
+    ```bash
+    cd backend
+    pip install -r requirements.txt
+    ```
+
+4.  **Configure environment variables**:
+    Create a `.env` file in the root directory and add your Gemini API key:
+    ```
+    VITE_GEMINI_API_KEY=your_api_key_here
+    ```
+
+### Running the Application
+
+1.  **Start the backend server**:
+    ```bash
+    cd backend
+    uvicorn main:app --reload
+    ```
+
+2.  **Start the frontend development server**:
+    ```bash
+    npm run dev
+    ```
+
+## Project Structure
+
+The project is organized into two main parts: a frontend application and a backend server.
+
+- **`frontend/`**: Contains the React application, including all components, services, and context providers for managing state.
+- **`backend/`**: Includes the FastAPI server, which handles API requests, manages the product catalog, and processes payments.
+- **`README.md`**: The file you are currently reading.

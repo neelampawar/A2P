@@ -4,6 +4,9 @@ import { AgentResponse, AgentActionType } from '../types';
 let genAI: GoogleGenAI | null = null;
 const imageCache: Record<string, string> = {};
 
+// Backend API URL from environment variables
+const BACKEND_URL = import .meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
 // Queue system to manage concurrency and rate limits for images
 const generationQueue: Array<{
   productId: string;
@@ -15,12 +18,16 @@ let isProcessingQueue = false;
 
 const getGenAI = () => {
   if (!genAI) {
-    genAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Gemini API key not found. Please set VITE_GEMINI_API_KEY in your .env file.');
+    }
+    genAI = new GoogleGenAI({ apiKey });
   }
   return genAI;
 };
 
-/* --- IMAGE GENERATION (Unchanged) --- */
+/* --- IMAGE GENERATION --- */
 
 export const getCachedImage = (productId: string): string | undefined => {
   return imageCache[productId];
@@ -62,14 +69,18 @@ const processQueue = async () => {
       });
 
       let imageUrl: string | null = null;
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          const base64String = part.inlineData.data;
-          const mimeType = part.inlineData.mimeType || 'image/png';
-          imageUrl = `data:${mimeType};base64,${base64String}`;
-          break;
+      // Use the correct response structure for the SDK
+      if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            const base64String = part.inlineData.data;
+            const mimeType = part.inlineData.mimeType || 'image/png';
+            imageUrl = `data:${mimeType};base64,${base64String}`;
+            break;
+          }
         }
       }
+
 
       if (imageUrl) {
         imageCache[task.productId] = imageUrl;
@@ -97,24 +108,70 @@ export const generateProductImage = (productId: string, productName: string, des
   });
 };
 
+/* --- BACKEND VALIDATION --- */
+
+export const validateProductWithBackend = async (productName: string): Promise<{ exists: boolean; price?: number }> => {
+  try {
+    const response = await fetch(`${BACKEND_URL}/merchant/validate_product`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_name: productName })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return { exists: true, price: data.price };
+    }
+    return { exists: false };
+  } catch (error) {
+    console.warn('Backend validation unavailable, using client-side only', error);
+    return { exists: false };
+  }
+};
+
+export const logAgentActionToBackend = async (action: string, details: any): Promise<void> => {
+  try {
+    await fetch(`${BACKEND_URL}/merchant/log_agent_action`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, details, timestamp: new Date().toISOString() })
+    });
+  } catch (error) {
+    console.warn('Could not log to backend', error);
+  }
+};
+
+
 /* --- SHOPPING AGENT (Chat) --- */
 
 export const createShoppingChat = (productList: string[]): Chat => {
   const ai = getGenAI();
   
   const systemPrompt = `
-    You are an intelligent shopping assistant for 'Cymbal Retail'.
-    Available Products: ${productList.join(', ')}.
+    You are an intelligent shopping assistant for 'Blinkit' powered by Agent Payments Protocol (AP2).
     
-    Your goal is to help the user build a cart through a natural conversation.
+    **Available Products**: ${productList.join(', ')}.
     
-    Protocol:
-    1. **Identify**: When user asks for a product, check if it exists in the Available Products list.
-    2. **Quantity Check**: If the user does not specify a quantity (e.g., "I want milk"), you MUST ask for it (e.g., "How many packets of Amul Taaza Milk (500ml) would you like?").
-    3. **Proposal**: Once you have the product and quantity, do NOT add it immediately. Instead, propose the action: "I've found [Product]. Shall I add [Quantity] to your cart?". Set type='PROPOSE_CART'.
-    4. **Action**: If the user confirms (e.g., "yes", "sure", "ok"), generate a response with type='ADD_TO_CART' containing the items. The message should say "Added [Product] to your cart. Anything else, or are you ready to checkout?".
-    5. **Checkout**: If the user indicates they want to pay or checkout, generate a response with type='INITIATE_CHECKOUT'.
-    6. **Clarify**: If a product is not found, suggest the closest match or apologize. Set type='INFO'.
+    **Your Responsibilities**:
+    1. Help users find and add products to their cart through natural conversation
+    2. Verify product availability (only suggest products from the Available Products list)
+    3. Always ask for quantity if not specified
+    4. Confirm items before adding to cart
+    5. Guide users to checkout when ready
+    
+    **Workflow**:
+    1. **QUESTION**: If user query is unclear, ask for clarification
+    2. **IDENTIFY**: Check if requested product exists in Available Products
+    3. **PROPOSE_CART**: Once product & quantity confirmed, propose adding to cart
+    4. **ADD_TO_CART**: User confirms → add items to cart with this type
+    5. **INITIATE_CHECKOUT**: When user wants to pay
+    6. **INFO**: For general information or when products unavailable
+    
+    **Important Rules**:
+    - Only suggest products from the Available Products list
+    - Always get quantity from user
+    - Be conversational and helpful
+    - Guide users smoothly to checkout
 
     Output Schema:
     You must always return a JSON object with this schema:
